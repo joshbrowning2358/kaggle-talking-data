@@ -1,0 +1,83 @@
+---
+title: "Untitled"
+author: "Josh Browning"
+date: "July 14, 2016"
+output: html_document
+---
+
+First, we load the data and the necessary libraries:
+
+```{r}
+library(data.table)
+library(bit64)
+library(venneuler)
+library(ggplot2)
+library(maps)
+library(mapdata)
+# events = fread("data/app_events.csv")
+# labels = fread("data/app_labels.csv")
+train = fread("data/gender_age_train.csv")
+test = fread("data/gender_age_test.csv")
+```
+
+Define a venn diagram plotting function:
+
+```{r}
+myVenn = function(A, B){
+    sizeAnotB = length(unique(A[!A %in% B]))
+    sizeBnotA = length(unique(B[!B %in% A]))
+    AandB = A[A %in% B]
+    if(length(AandB) > 0)
+        sizeAandB = length(unique(A[A %in% B]))
+    else
+        sizeAandB = 0
+    v = venneuler(c(A=sizeAnotB, B=sizeBnotA, "A&B"=sizeAandB))
+    plot(v)
+}
+```
+
+Let's first confirm that the device id's between test and train do not overlap at all:
+
+```{r, echo=FALSE}
+myVenn(train$device_id, test$device_id)
+```
+
+So, there's no overlap, just like we would have expected.
+
+## Brand
+
+What if we look at distributions by phone brand?
+
+```{r}
+phone_brand = fread("data/phone_brand_device_model.csv")
+phone_brand[, train := device_id %in% train$device_id]
+phone_brand[, test := device_id %in% test$device_id]
+brand_cnts = phone_brand[, .N, by=phone_brand][order(N, decreasing=TRUE), ]
+phone_brand[, phone_brand := factor(phone_brand, levels=brand_cnts$phone_brand)]
+ggplot(phone_brand, aes(x=phone_brand, fill=train)) + geom_bar() +
+    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
+```
+
+Most phones fall into one of a few different brands, but there are a total of 131 brands!  We can also look at the proportion of users within each brand that are in test/train (again, the below graph is sorted from highest brand by volume on the left to lowest brand by volume on the right):
+
+```{r}
+ggplot(phone_brand, aes(x=phone_brand, fill=train)) + geom_bar(position="fill") +
+    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
+```
+
+Let's confirm all device id's fall into either train or test:
+
+```{r}
+phone_brand[, all(xor(train, test))]
+```
+
+## Location
+
+```{r}
+events = fread("data/events.csv", nrow=1000)
+events[, train := events$device_id %in% train$device_id]
+events[, test := events$device_id %in% test$device_id]
+china_map = fortify(map("china", fill=FALSE, plot=FALSE))
+ggplot(events, aes(x=longitude, y=latitude, color=test)) + geom_point() +
+    geom_polygon(data=china_map, aes(x=long, y=lat, group=region, color=NULL, fill=NULL))
+```
