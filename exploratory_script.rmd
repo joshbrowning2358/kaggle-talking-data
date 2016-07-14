@@ -71,13 +71,42 @@ Let's confirm all device id's fall into either train or test:
 phone_brand[, all(xor(train, test))]
 ```
 
-## Location
+What about multiple records for one device_id?
 
 ```{r}
-events = fread("data/events.csv", nrow=10000)
+duplicate_device_id = phone_brand[, list(device_cnt = length(unique(paste0(phone_brand, " - ", device_model)))),
+                                         by=device_id][device_cnt > 1, device_id]
+phone_brand[device_id %in% duplicate_device_id, ][order(device_id)]
+```
+
+## Events Data
+
+Spatial density of observations in the training dataset:
+
+```{r}
+events = fread("data/events.csv")
 events[, train := events$device_id %in% train$device_id]
 events[, test := events$device_id %in% test$device_id]
 china_map = fortify(map("china", fill=FALSE, plot=FALSE))
-ggplot(events, aes(x=longitude, y=latitude, color=test)) + geom_point() +
-    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL))
+long_coordinates = c(70, 135)
+lat_coordinates = c(15, 55)
+ggplot() +
+    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL)) +
+    stat_density2d(data=events[(train), ], aes(x=longitude, y=latitude, fill = ..level..), geom="polygon", alpha=0.5) +
+    coord_cartesian(xlim=long_coordinates, ylim=lat_coordinates) +
+    labs(fill="")
+```
+
+Spatial density of observations in the testing dataset:
+
+```{r}
+ggplot() +
+    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL)) +
+    stat_density2d(data=events[(test), ], aes(x=longitude, y=latitude, fill = ..level..), geom="polygon", alpha=0.5) +
+    coord_cartesian(xlim=long_coordinates, ylim=lat_coordinates) +
+    labs(fill="")
+```
+
+```{r, eval=FALSE, echo=FALSE}
+# agg_by_events = events[, .N, by=c("device_id", "train")]
 ```
