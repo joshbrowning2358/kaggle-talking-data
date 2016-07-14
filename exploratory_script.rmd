@@ -74,10 +74,10 @@ phone_brand[, all(xor(train, test))]
 ## Location
 
 ```{r}
-events = fread("data/events.csv", nrow=1000)
+events = fread("data/events.csv", nrow=10000)
 events[, train := events$device_id %in% train$device_id]
 events[, test := events$device_id %in% test$device_id]
 china_map = fortify(map("china", fill=FALSE, plot=FALSE))
 ggplot(events, aes(x=longitude, y=latitude, color=test)) + geom_point() +
-    geom_polygon(data=china_map, aes(x=long, y=lat, group=region, color=NULL, fill=NULL))
+    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL))
 ```
