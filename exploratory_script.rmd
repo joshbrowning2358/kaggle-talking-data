@@ -8,16 +8,21 @@ output: html_document
 First, we load the data and the necessary libraries:
 
 ```{r}
+suppressPackageStartupMessages({
 library(data.table)
 library(bit64)
 library(venneuler)
 library(ggplot2)
+library(scales)
 library(maps)
 library(mapdata)
+library(PropCIs)
+})
 # events = fread("data/app_events.csv")
 # labels = fread("data/app_labels.csv")
 train = fread("data/gender_age_train.csv")
 test = fread("data/gender_age_test.csv")
+split_rate = nrow(test) / (nrow(train) + nrow(test))
 ```
 
 Define a venn diagram plotting function:
@@ -54,15 +59,18 @@ phone_brand[, train := device_id %in% train$device_id]
 phone_brand[, test := device_id %in% test$device_id]
 brand_cnts = phone_brand[, .N, by=phone_brand][order(N, decreasing=TRUE), ]
 phone_brand[, phone_brand := factor(phone_brand, levels=brand_cnts$phone_brand)]
-ggplot(phone_brand, aes(x=phone_brand, fill=train)) + geom_bar() +
+ggplot(phone_brand, aes(x=phone_brand, fill=train, color=train)) + geom_bar() +
     scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
 ```
 
 Most phones fall into one of a few different brands, but there are a total of 131 brands!  We can also look at the proportion of users within each brand that are in test/train (again, the below graph is sorted from highest brand by volume on the left to lowest brand by volume on the right):
 
 ```{r}
-ggplot(phone_brand, aes(x=phone_brand, fill=train)) + geom_bar(position="fill") +
-    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
+phone_brand[, p_value := prop.test(sum(train), .N, split_rate)$p.value, by=phone_brand]
+ggplot(phone_brand, aes(x=phone_brand)) +
+    geom_bar(position="fill", aes(fill=train, color=train)) +
+    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts))) +
+    geom_point(aes(y=p_value))
 ```
 
 Let's confirm all device id's fall into either train or test:
@@ -107,6 +115,95 @@ ggplot() +
     labs(fill="")
 ```
 
-```{r, eval=FALSE, echo=FALSE}
-# agg_by_events = events[, .N, by=c("device_id", "train")]
+The distribution of event counts seems split very evenly between test and train:
+
+```{r}
+event_cnts = events[, .N, by=c("device_id", "train")]
+ggplot(event_cnts, aes(x=N, fill=train)) + geom_histogram() +
+    scale_x_log10()
+```
+
+This consistency is even more clear when we plot the percentage within each group:
+
+```{r}
+ggplot(event_cnts, aes(x=N, fill=train)) + geom_histogram(position="fill") +
+    scale_x_log10() + scale_y_continuous("percent", label=percent)
+```
+
+```{r}
+events[, timestamp := as.POSIXct(timestamp)]
+ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram()
+```
+
+```{r}
+events[, time := strftime(timestamp, format="%H:%M:%S")]
+events[, time_of_day := as.POSIXct(time, format="%H:%M:%S")]
+ggplot(events, aes(x=time_of_day, fill=train)) + geom_histogram()
+```
+
+## Apps
+
+```{r}
+app_events = fread("data/app_events.csv")
+labels = fread("data/app_labels.csv")
+app_events = merge(app_events, events[, c("event_id", "train"), with=FALSE], by="event_id", all.x=TRUE)
+```
+
+Do any app events not have an assosciated event_id in events?
+
+```{r}
+app_events[is.na(train), ]
+```
+
+Can one event have multiple apps?
+
+```{r}
+apps_per_event = app_events[, list(count=.N), by=c("event_id", "train")]
+apps_per_event[order(count), ]
+```
+
+Yes, as many as 320 apps in one event!  Ok, let's look at the distribution of these events:
+
+```{r}
+ggplot(apps_per_event, aes(x=count, fill=train, color=train)) + geom_histogram() 
+```
+
+```{r}
+ggplot(apps_per_event, aes(x=count, fill=train, color=train)) + geom_histogram(position="fill") +
+    scale_y_continuous("percent", label=percent)
+```
+
+Now, what if we restrict our attention to only apps that were active or installed?  It seems that is_installed will not be a useful feature, since it's always 1:
+
+```{r}
+app_events[, .N, is_installed]
+```
+
+The number of active apps per event is generally smaller than the number of non-active apps per event (rarely more than 50 active apps per event, while this is not too uncommon for non-active apps).  However, the number of events with non-active apps is much smaller overall.
+
+```{r}
+apps_per_event = app_events[, list(count=.N), by=c("event_id", "train", "is_active")]
+ggplot(apps_per_event, aes(x=count, fill=train, color=train)) + geom_histogram() +
+    facet_wrap( ~ is_active)
+```
+
+However, the distribution between test and train seems to be roughly what we'd expect if the split were done randomly:
+
+```{r}
+ggplot(apps_per_event, aes(x=count, fill=train, color=train)) + geom_histogram(position="fill") +
+    scale_y_continuous("percent", label=percent) + facet_wrap( ~ is_active)
+```
+
+Categorizing these app events:
+
+```{r}
+labels[, .N, by=app_id][order(N), ]
+labels[, .N, by=app_id][, mean(N > 1)]
+```
+
+So, one particular app can have multiple categories (as many as 26!).  This is very common, as 93% of these apps have more than one category.
+
+```{r}
+app_events = merge(app_events, labels, by="app_id", all.x=TRUE, allow.cartesian=TRUE)
+app_events[is.na(label_id), ]
 ```
