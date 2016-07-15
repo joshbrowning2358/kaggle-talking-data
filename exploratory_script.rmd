@@ -16,7 +16,6 @@ library(ggplot2)
 library(scales)
 library(maps)
 library(mapdata)
-library(PropCIs)
 })
 # events = fread("data/app_events.csv")
 # labels = fread("data/app_labels.csv")
@@ -66,11 +65,9 @@ ggplot(phone_brand, aes(x=phone_brand, fill=train, color=train)) + geom_bar() +
 Most phones fall into one of a few different brands, but there are a total of 131 brands!  We can also look at the proportion of users within each brand that are in test/train (again, the below graph is sorted from highest brand by volume on the left to lowest brand by volume on the right):
 
 ```{r}
-phone_brand[, p_value := prop.test(sum(train), .N, split_rate)$p.value, by=phone_brand]
 ggplot(phone_brand, aes(x=phone_brand)) +
     geom_bar(position="fill", aes(fill=train, color=train)) +
-    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts))) +
-    geom_point(aes(y=p_value))
+    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
 ```
 
 Let's confirm all device id's fall into either train or test:
@@ -132,13 +129,15 @@ ggplot(event_cnts, aes(x=N, fill=train)) + geom_histogram(position="fill") +
 
 ```{r}
 events[, timestamp := as.POSIXct(timestamp)]
-ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram()
+ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram(binwidth=1)
+ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram(binwidth=1, position="fill")
 ```
 
 ```{r}
 events[, time := strftime(timestamp, format="%H:%M:%S")]
 events[, time_of_day := as.POSIXct(time, format="%H:%M:%S")]
 ggplot(events, aes(x=time_of_day, fill=train)) + geom_histogram()
+ggplot(events, aes(x=time_of_day, fill=train)) + geom_histogram(position="fill")
 ```
 
 ## Apps
@@ -206,4 +205,18 @@ So, one particular app can have multiple categories (as many as 26!).  This is v
 ```{r}
 app_events = merge(app_events, labels, by="app_id", all.x=TRUE, allow.cartesian=TRUE)
 app_events[is.na(label_id), ]
+```
+
+Now, let's see if there's any apparent bias among these app categories between train and test:
+
+```{r}
+label_cnts = app_events[, .N, by=label_id][order(N, decreasing=TRUE), ]
+app_events[, labels := factor(labels, levels=label_cnts$label_id)]
+ggplot(app_events, aes(x=label_id, fill=train, color=train)) + geom_bar() +
+    scale_x_discrete(breaks=label_cnts$label_id, labels=rep("", nrow(label_cnts)))
+```
+
+```{r}
+ggplot(app_events, aes(x=label_id, fill=train, color=train)) + geom_bar(position="fill") +
+    scale_x_discrete(breaks=label_cnts$label_id, labels=rep("", nrow(label_cnts)))
 ```
