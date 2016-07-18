@@ -14,30 +14,14 @@ library(bit64)
 library(venneuler)
 library(ggplot2)
 library(scales)
-library(maps)
-library(mapdata)
+library(ggmap)
+library(mapplots)
 })
-# events = fread("data/app_events.csv")
-# labels = fread("data/app_labels.csv")
+source("R/myVenn.R")
+source("R/plot_proportions.R")
 train = fread("data/gender_age_train.csv")
 test = fread("data/gender_age_test.csv")
 split_rate = nrow(test) / (nrow(train) + nrow(test))
-```
-
-Define a venn diagram plotting function:
-
-```{r}
-myVenn = function(A, B){
-    sizeAnotB = length(unique(A[!A %in% B]))
-    sizeBnotA = length(unique(B[!B %in% A]))
-    AandB = A[A %in% B]
-    if(length(AandB) > 0)
-        sizeAandB = length(unique(A[A %in% B]))
-    else
-        sizeAandB = 0
-    v = venneuler(c(A=sizeAnotB, B=sizeBnotA, "A&B"=sizeAandB))
-    plot(v)
-}
 ```
 
 Let's first confirm that the device id's between test and train do not overlap at all:
@@ -62,15 +46,25 @@ ggplot(phone_brand, aes(x=phone_brand, fill=train, color=train)) + geom_bar() +
     scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
 ```
 
-Most phones fall into one of a few different brands, but there are a total of 131 brands!  We can also look at the proportion of users within each brand that are in test/train (again, the below graph is sorted from highest brand by volume on the left to lowest brand by volume on the right):
+Most phones fall into one of a few different brands, but there are a total of 131 brands!  We can also look at the proportion of users within each brand that are in test/train.  In the below graph, each point represents a particular brand, with the x axis representing the (total) number of devices with that brand and the y axis representing the proportion of devices that are in the training set.  We'd expect, with 99\% confidence, that each point falls within the shaded region (a 99\% confidence interval):
 
 ```{r}
-ggplot(phone_brand, aes(x=phone_brand)) +
-    geom_bar(position="fill", aes(fill=train, color=train)) +
-    scale_x_discrete(breaks=brand_cnts$phone_brand, labels=rep("", nrow(brand_cnts)))
+toPlot = phone_brand[, list(count=.N, proportion=mean(train)), by=phone_brand]
+toPlot = toPlot[count > 10, ]
+plot_proportions(toPlot, true_prop=1 - split_rate) + 
+    scale_x_log10() + labs(title="Distributions of counts vs. proportions for phone brands")
 ```
 
-Let's confirm all device id's fall into either train or test:
+And, just to be sure, let's plot the same graph for device_model:
+
+```{r}
+toPlot = phone_brand[, list(count=.N, proportion=mean(train)), by=device_model]
+toPlot = toPlot[count > 10, ]
+plot_proportions(toPlot, true_prop=1 - split_rate) + 
+    scale_x_log10() + labs(title="Distributions of counts vs. proportions for device types")
+```
+
+Let\'s confirm all device id's fall into either train or test:
 
 ```{r}
 phone_brand[, all(xor(train, test))]
@@ -84,19 +78,29 @@ duplicate_device_id = phone_brand[, list(device_cnt = length(unique(paste0(phone
 phone_brand[device_id %in% duplicate_device_id, ][order(device_id)]
 ```
 
-## Events Data
+## Events Data: Location
 
-Spatial density of observations in the training dataset:
+Spatial plot of the locations of events in the dataset
 
 ```{r}
 events = fread("data/events.csv")
 events[, train := events$device_id %in% train$device_id]
 events[, test := events$device_id %in% test$device_id]
-china_map = fortify(map("china", fill=FALSE, plot=FALSE))
-long_coordinates = c(70, 135)
-lat_coordinates = c(15, 55)
+long_coordinates <- c(73.49941, 134.77281)
+lat_coordinates <- c(18.15762, 53.55811)
 ggplot() +
-    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL)) +
+    borders("world", regions = "China", colour = "gray50", fill = "gray50") +
+    geom_point(data=events, aes(x=longitude, y=latitude, color=ifelse(train, "Train", "Test")),
+               size=0.05, alpha=0.5) +
+    coord_cartesian(xlim=long_coordinates, ylim=lat_coordinates) +
+    labs(fill="", color="")
+```
+
+Spatial density of observations in the training dataset:
+
+```{r}
+ggplot() +
+    borders("world", regions = "China", colour = "gray50", fill = "gray50") +
     stat_density2d(data=events[(train), ], aes(x=longitude, y=latitude, fill = ..level..), geom="polygon", alpha=0.5) +
     coord_cartesian(xlim=long_coordinates, ylim=lat_coordinates) +
     labs(fill="")
@@ -106,11 +110,35 @@ Spatial density of observations in the testing dataset:
 
 ```{r}
 ggplot() +
-    geom_polygon(data=china_map, aes(x=long, y=lat, group=group, color=NULL, fill=NULL)) +
+    borders("world", regions = "China", colour = "gray50", fill = "gray50") +
     stat_density2d(data=events[(test), ], aes(x=longitude, y=latitude, fill = ..level..), geom="polygon", alpha=0.5) +
     coord_cartesian(xlim=long_coordinates, ylim=lat_coordinates) +
     labs(fill="")
 ```
+
+And histograms of the univariate latitude/longitude:
+
+```{r}
+ggplot(events, aes(x=latitude, color=train, fill=train)) +
+    geom_histogram(binwidth=2)
+```
+
+```{r}
+toPlot = events[, list(count=.N, proportion=mean(train)), by=round(latitude, 1)]
+plot_proportions(toPlot[count > 10, ], true_prop=1-split_rate) + scale_x_log10()
+```
+
+```{r}
+ggplot(events, aes(x=longitude, color=train, fill=train)) +
+    geom_histogram(binwidth=2)
+```
+
+```{r}
+toPlot = events[, list(count=.N, proportion=mean(train)), by=round(longitude, 1)]
+plot_proportions(toPlot[count > 10, ], true_prop=1-split_rate) + scale_x_log10()
+```
+
+## Events Data: Counts and Time
 
 The distribution of event counts seems split very evenly between test and train:
 
@@ -123,14 +151,28 @@ ggplot(event_cnts, aes(x=N, fill=train)) + geom_histogram() +
 This consistency is even more clear when we plot the percentage within each group:
 
 ```{r}
-ggplot(event_cnts, aes(x=N, fill=train)) + geom_histogram(position="fill") +
-    scale_x_log10() + scale_y_continuous("percent", label=percent)
+toPlot = event_cnts[, list(count=.N, proportion=mean(train)), by=N]
+plot_proportions(toPlot, true_prop=1-split_rate) + scale_x_log10()
 ```
 
 ```{r}
 events[, timestamp := as.POSIXct(timestamp)]
 ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram(binwidth=1)
 ggplot(events, aes(x=timestamp, fill=train)) + geom_histogram(binwidth=1, position="fill")
+```
+
+```{r}
+events[, numericHour := round(as.numeric(timestamp)/3600)]
+toPlot = events[, list(proportion=mean(train), count=.N), by=numericHour]
+plot_proportions(toPlot, true_prop=1-split_rate)
+```
+
+```{r}
+events[, weight_in_sum := 1/.N, by=device_id]
+toPlot = events[, list(proportion=sum(weight_in_sum * train)/sum(weight_in_sum),
+                       count=sum(weight_in_sum)),
+                by=numericHour]
+plot_proportions(toPlot, true_prop=1-split_rate)
 ```
 
 ```{r}
