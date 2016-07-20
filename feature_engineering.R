@@ -16,17 +16,15 @@ label_categories = fread("data/label_categories.csv")
 
 ## Brand and model
 
-brand = sparse.model.matrix(device_id ~ phone_brand + 0, data=phone_brand)
+brand = sparse.model.matrix(device_model ~ device_id + factor(phone_brand) + 0, data=phone_brand)
 save(brand, file="features/brand.RData")
 
 model = sparse.model.matrix(device_id ~ device_model + 0, data=phone_brand)
 save(model, file="features/model.RData")
 
-rm(model, brand, phone_brand)
-gc()
-
 ## Events
 
+# counts
 train[, has_event := device_id %in% events$device_id]
 test[, has_event := device_id %in% events$device_id]
 write.csv(rbind(train[, c("device_id", "has_event"), with=FALSE],
@@ -39,6 +37,7 @@ event_counts = rbind(data.table(device_id=test[!(has_event), device_id], event_c
 event_counts = event_counts[device_id %in% train$device_id | device_id %in% test$device_id, ]
 write.csv(event_counts, file="features/event_counts.csv", row.names=FALSE)
 
+# geo location
 avg_position = events[, list(avg_latitude=mean(latitude), avg_longitude=mean(longitude)),
                       by = device_id]
 avg_position = rbind(data.table(device_id=train[!(has_event), device_id], avg_latitude=NA, avg_longitude=NA),
@@ -56,6 +55,10 @@ sd_position = rbind(data.table(device_id=test[!(has_event), device_id], sd_latit
                      sd_position)
 sd_position = sd_position[device_id %in% train$device_id | device_id %in% test$device_id, ]
 write.csv(sd_position, file="features/sd_position.csv", row.names=FALSE)
+
+# time
+events[, timestamp := as.POSIXct(timestamp)]
+qplot(events[, as.POSIXct(as.character(timestamp, "%H:%M:%S"), format="%H:%M:%S")])
 
 ## Apps
 
