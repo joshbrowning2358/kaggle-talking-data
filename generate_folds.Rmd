@@ -57,6 +57,7 @@ set.seed(123)
 fold_cnt = 4
 train[, fold := sample(rep(1:4, ceiling(nrow(train)/4)), size=nrow(train))]
 train_events = merge(events, train[, list(device_id, fold)], by="device_id")
+write.csv(train, file="data/gender_age_train_folds.csv", row.names=FALSE)
 ```
 
 Now, we can plot the same latitude/longitude graphs as before, but instead look at the proportion in fold i vs the proportion not in fold i:

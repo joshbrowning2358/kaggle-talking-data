@@ -36,10 +36,25 @@ So, there's no overlap, just like we would have expected.
 
 What if we look at distributions by phone brand?
 
-```{r}
+```{r, echo=FALSE}
 phone_brand = fread("data/phone_brand_device_model.csv")
 phone_brand[, train := device_id %in% train$device_id]
 phone_brand[, test := device_id %in% test$device_id]
+myVenn(unique(phone_brand[(train), phone_brand]), unique(phone_brand[!(train), phone_brand]))
+```
+
+There is quite high overlap.  How many brands don't overlap?  How many users does this correspond to?
+
+```{r}
+brand_train_only = setdiff(unique(phone_brand[(train), phone_brand]),
+                           unique(phone_brand[!(train), phone_brand]))
+phone_brand[phone_brand %in% brand_train_only, .N, phone_brand]
+brand_test_only = setdiff(unique(phone_brand[(test), phone_brand]),
+                           unique(phone_brand[!(test), phone_brand]))
+phone_brand[phone_brand %in% brand_test_only, .N, phone_brand]
+```
+
+```{r}
 brand_cnts = phone_brand[, .N, by=phone_brand][order(N, decreasing=TRUE), ]
 phone_brand[, phone_brand := factor(phone_brand, levels=brand_cnts$phone_brand)]
 ggplot(phone_brand, aes(x=phone_brand, fill=train, color=train)) + geom_bar() +
