@@ -58,8 +58,22 @@ write.csv(sd_position, file="features/sd_position.csv", row.names=FALSE)
 
 # time
 events[, timestamp := as.POSIXct(timestamp)]
-qplot(events[, as.POSIXct(as.character(timestamp, "%H:%M:%S"), format="%H:%M:%S")])
+ggsave("event_counts_over_time.png",
+    qplot(events[, as.POSIXct(as.character(timestamp, "%H:%M:%S"), format="%H:%M:%S")]) +
+        labs(x= "Event hour (date is meaningless)"))
+events[, hour_of_day := as.numeric(as.character(timestamp, "%H"))]
+count_by_hour = events[, .N, by=c("device_id", "hour_of_day")]
+count_by_hour = dcast(count_by_hour, device_id ~ hour_of_day, value.var="N", fill=0)
+setnames(count_by_hour, as.character(0:23), paste0("hour_", 0:23, "_cnt"))
+count_by_hour = rbindlist(list(train[!(has_event), list(device_id)], count_by_hour), fill=TRUE)
+count_by_hour = rbindlist(list(test[!(has_event), list(device_id)], count_by_hour), fill=TRUE)
+sapply(colnames(count_by_hour), function(col){
+    count_by_hour[is.na(get(col)), c(col) := 0]
+})
+write.csv(count_by_hour, "features/count_by_hour.csv", row.names=FALSE)
 
+write.csv(count_by_hour, "features/count_by_hour.csv", row.names=FALSE)
+    
 ## Apps
 
 # Quantity of app events
