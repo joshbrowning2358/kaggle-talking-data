@@ -3,6 +3,8 @@ library(data.table)
 library(gridExtra)
 library(DEoptim)
 
+setClassUnion("factorOrNumeric", c("numeric", "factor"))
+
 ##' Check Cross Validation Model
 ##'
 ##' @param object An S4 object.
@@ -95,7 +97,7 @@ checkCrossValidation = function(object){
 crossValidation = setClass(Class = "crossValidation",
     representation = representation(model = "list",
                                     xTrain = "data.table",
-                                    yTrain = "numeric",
+                                    yTrain = "factorOrNumeric",
                                     xTest = "data.table",
                                     cvIndices = "numeric",
                                     validationIndices = "logical",
@@ -202,8 +204,18 @@ setMethod("runCv", signature(object="crossValidation"), function(object, metric,
             filter = object@cvIndices != i
         }
         model = object@model$fit(object@xTrain[filter, ], object@yTrain[filter])
-        predictions[!filter] = object@model$predict(model, object@xTrain[!filter, ])
-        subScore = c(subScore, metric(predictions[!filter], object@yTrain[!filter]))
+        cvPredictions = object@model$predict(model, object@xTrain[!filter, ])
+        if(is.null(dim(predictions)) & !is.null(dim(cvPredictions))){
+            predictions = matrix(NA, nrow=length(object@yTrain), ncol=ncol(cvPredictions))
+            colnames(predictions) = colnames(cvPredictions)
+        }
+        if(!is.null(dim(cvPredictions))){
+            predictions[!filter, ] = cvPredictions
+            subScore = c(subScore, metric(predictions[!filter, ], object@yTrain[!filter]))
+        } else {
+            predictions[!filter] = cvPredictions
+            subScore = c(subScore, metric(predictions[!filter], object@yTrain[!filter]))
+        }
         cat("Model for group", i, "completed with score", subScore[length(subScore)], "\n")
     }
     if(!timeCrossValidation){
@@ -215,12 +227,12 @@ setMethod("runCv", signature(object="crossValidation"), function(object, metric,
         # For saving the file, just use the last CV score.
         finalScore = subScore[length(subScore)]
         if(plotResults){
-            plotPreds(predictions, object, filename)
+            plotPreds(predictions, object, filename, metric)
         }
         cat("Modeling finished!\n")
     }
     if(plotResults){
-        plotPreds(predictions, object, filename)
+        plotPreds(predictions, object, filename, metric)
     }
     filename = paste0(filename, "_", round(finalScore, 6), ".csv")
     if(logged)
@@ -241,7 +253,7 @@ setMethod("runVal", signature(object="crossValidation"), function(object, metric
     predictions = object@model$predict(model, object@xTrain[!filter, ])
     score = metric(predictions, object@yTrain[!filter])
     if(plotResults){
-        plotPreds(predictions, object, filename)
+        plotPreds(predictions, object, filename, metric)
     }
     cat("Cross-validation finished!  Final score: ", score, "\n")
     filename = paste0(filename, "_", round(score, 6), ".csv")
@@ -311,8 +323,8 @@ setMethod("logResults", signature(object="crossValidation"),
 
 ##' Plot Predictions
 ##' 
-setGeneric("plotPreds", function(preds, object, filename){standardGeneric("plotPreds")})
-setMethod("plotPreds", signature(object="crossValidation"), function(preds, object, filename){
+setGeneric("plotPreds", function(preds, object, filename, metric){standardGeneric("plotPreds")})
+setMethod("plotPreds", signature(object="crossValidation"), function(preds, object, filename, metric){
     suppressWarnings(dir.create("plots"))
     if(!(length(object@cvTime) == 0 || !object@cvTime))
         filter = object@cvIndices == max(object@cvIndices)
@@ -320,15 +332,16 @@ setMethod("plotPreds", signature(object="crossValidation"), function(preds, obje
         filter = 1:nrow(object@xTrain)
     for(col in colnames(object@xTrain)){
         plotFile = paste0("plots/", gsub(".*/", "", filename), "_", cleanName(col), ".png")
-        d = data.frame(Error = preds[filter] - object@yTrain[filter], var = object@xTrain[[col]][filter])
-        cat(col, "\n")
+        d = data.frame(Error = preds[filter] - object@yTrain[filter],
+                       var = object@xTrain[[col]][filter])
+        cat("Plot generated for", col, "\n")
         if(is(d$var, "factor") | is(d$var, "logical")){
             ggsave(plotFile,
                    ggplot(d, aes(x=var, y=Error)) + geom_boxplot() +
                        labs(x = col) + theme(axis.text.x=element_text(angle=90))
                    ,width=10, height=10)
         } else {
-            suppressWarnings({suppressMessages({
+            suppressWarnings({suppressMessages({try({
                 xRange = range(d$var, na.rm=TRUE)
                 xRange = xRange + (xRange[2]-xRange[1])*c(-0.05, 0.05)
                 pSmooth = ggplot(d, aes(x=var, y=Error)) + geom_smooth() +
@@ -338,7 +351,7 @@ setMethod("plotPreds", signature(object="crossValidation"), function(preds, obje
                 ggsave(plotFile,
                        grid.arrange(pSmooth, pHist, heights=c(8, 2))
                        ,width=10, height=10)
-            })})
+            })})})
         }
     }
     plotFile = paste0("plots/", gsub(".*/", "", filename), "_target.png")
