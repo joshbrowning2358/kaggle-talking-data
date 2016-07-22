@@ -5,6 +5,7 @@
 library(data.table)
 library(Matrix)
 library(bit64)
+library(ggplot2)
 
 train = fread("data/gender_age_train.csv")
 test = fread("data/gender_age_test.csv")
@@ -34,7 +35,7 @@ event_counts = rbind(data.table(device_id=train[!(has_event), device_id], event_
                      event_counts)
 event_counts = rbind(data.table(device_id=test[!(has_event), device_id], event_counts=0),
                      event_counts)
-event_counts = event_counts[device_id %in% train$device_id | device_id %in% test$device_id, ]
+event_counts = event_counts[device_id %in% c(test$device_id, train$device_id), ]
 write.csv(event_counts, file="features/event_counts.csv", row.names=FALSE)
 
 # geo location
@@ -44,7 +45,7 @@ avg_position = rbind(data.table(device_id=train[!(has_event), device_id], avg_la
                      avg_position)
 avg_position = rbind(data.table(device_id=test[!(has_event), device_id], avg_latitude=NA, avg_longitude=NA),
                      avg_position)
-avg_position = avg_position[device_id %in% train$device_id | device_id %in% test$device_id, ]
+avg_position = avg_position[device_id %in% c(test$device_id, train$device_id), ]
 write.csv(avg_position, file="features/avg_position.csv", row.names=FALSE)
 
 sd_position = events[, list(sd_latitude=sd(latitude), sd_longitude=sd(longitude)),
@@ -53,7 +54,7 @@ sd_position = rbind(data.table(device_id=train[!(has_event), device_id], sd_lati
                      sd_position)
 sd_position = rbind(data.table(device_id=test[!(has_event), device_id], sd_latitude=NA, sd_longitude=NA),
                      sd_position)
-sd_position = sd_position[device_id %in% train$device_id | device_id %in% test$device_id, ]
+sd_position = sd_position[device_id %in% c(test$device_id, train$device_id), ]
 write.csv(sd_position, file="features/sd_position.csv", row.names=FALSE)
 
 # time
@@ -70,14 +71,44 @@ count_by_hour = rbindlist(list(test[!(has_event), list(device_id)], count_by_hou
 sapply(colnames(count_by_hour), function(col){
     count_by_hour[is.na(get(col)), c(col) := 0]
 })
+count_by_hour = count_by_hour[device_id %in% c(test$device_id, train$device_id), ]
 write.csv(count_by_hour, "features/count_by_hour.csv", row.names=FALSE)
 
-write.csv(count_by_hour, "features/count_by_hour.csv", row.names=FALSE)
-    
+count_by_period = events[, list(early_morning_cnt = sum(hour_of_day <= 5),
+                                 morning_cnt = sum(hour_of_day > 5 & hour_of_day <= 12 ),
+                                 afternoon_cnt = sum(hour_of_day > 12 & hour_of_day <= 18),
+                                 evening_cnt = sum(hour_of_day > 18)), by=device_id]
+count_by_period = rbindlist(list(train[!(has_event), list(device_id)], count_by_period), fill=TRUE)
+count_by_period = rbindlist(list(test[!(has_event), list(device_id)], count_by_period), fill=TRUE)
+sapply(colnames(count_by_period), function(col){
+    count_by_period[is.na(get(col)), c(col) := 0]
+})
+count_by_period = count_by_period[device_id %in% c(test$device_id, train$device_id), ]
+write.csv(count_by_period, "features/count_by_period.csv", row.names=FALSE)
+
 ## Apps
 
-# Quantity of app events
-# Apps active on events
-# Time of usage (may vary by app)
+app_events = merge(app_events, events[, list(event_id, device_id)], by="event_id", all.x=TRUE)
+
+apps_per_event = app_events[, list(installed=.N, active=sum(is_active)),
+                            by=c("device_id", "event_id")]
+apps_per_event_feature = apps_per_event[, list(max_apps_per_event = max(installed),
+                                               min_apps_per_event = min(installed),
+                                               avg_apps_per_event = mean(installed),
+                                               max_active_per_event = max(active),
+                                               min_active_per_event = min(active),
+                                               avg_active_per_event = mean(active),
+                                               avg_active_pct = mean(active/installed)),
+                                        by="device_id"]
+apps_per_event_feature = rbindlist(list(train[!device_id %in% apps_per_event_feature$device_id,
+                                              list(device_id)],
+                                        apps_per_event_feature), fill=TRUE)
+apps_per_event_feature = rbindlist(list(test[!device_id %in% apps_per_event_feature$device_id,
+                                             list(device_id)],
+                                        apps_per_event_feature), fill=TRUE)
+apps_per_event_feature = apps_per_event_feature[device_id %in% c(test$device_id, train$device_id), ]
+write.csv(apps_per_event_feature, "features/apps_per_event.csv", row.names=FALSE)
+
+app_events = merge(app_events, app_labels, by="app_id")
+
 # Type of app: boolean, count, proportion of total by device_id
-# Average time (or maybe bucket times according to pre-work, work, post work, ...)
