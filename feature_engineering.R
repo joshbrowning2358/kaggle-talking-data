@@ -109,6 +109,18 @@ apps_per_event_feature = rbindlist(list(test[!device_id %in% apps_per_event_feat
 apps_per_event_feature = apps_per_event_feature[device_id %in% c(test$device_id, train$device_id), ]
 write.csv(apps_per_event_feature, "features/apps_per_event.csv", row.names=FALSE)
 
-app_events = merge(app_events, app_labels, by="app_id")
+installed_app_cnts = app_events[, .N, by=c("app_id", "device_id")]
+installed_app_cnts = merge(installed_app_cnts, app_labels, by="app_id", allow.cartesian=TRUE)
+installed_app_cnts = installed_app_cnts[, list(app_type_cnt=sum(N)), by=c("device_id", "label_id")]
+installed_app_cnts = merge(installed_app_cnts, label_categories, by="label_id")
+installed_app_cnts = installed_app_cnts[, list(app_type_cnt=sum(app_type_cnt)), by=c("device_id", "category")]
+write.csv(installed_app_cnts, "features/installed_app_category_counts.csv", row.names=FALSE)
+
+active_app_cnts = app_events[is_active == 1, .N, by=c("app_id", "device_id")]
+active_app_cnts = merge(active_app_cnts, app_labels, by="app_id", allow.cartesian=TRUE)
+active_app_cnts = active_app_cnts[, list(app_type_cnt=sum(N)), by=c("device_id", "label_id")]
+active_app_cnts = merge(active_app_cnts, label_categories, by="label_id")
+active_app_cnts = active_app_cnts[, list(app_type_cnt=sum(app_type_cnt)), by=c("device_id", "category")]
+write.csv(active_app_cnts, "features/active_app_category_counts.csv", row.names=FALSE)
 
 # Type of app: boolean, count, proportion of total by device_id
