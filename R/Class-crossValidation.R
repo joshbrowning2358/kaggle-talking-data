@@ -292,7 +292,7 @@ setMethod("logResults", signature(object="crossValidation"),
     log_file = "results_log.txt"
     
     functionText = as.character(body(object@model$fit))
-    possibleModels = c("xgboost", "glm", "lm", "naiveBayes")
+    possibleModels = c("xgboost", "xgb.train", "glm", "lm", "naiveBayes")
     match = sapply(possibleModels, function(mod){grep(mod, functionText)})
     suppressWarnings({
         matchIndex = min((1:length(match))[sapply(match, function(x){length(x) > 0})])

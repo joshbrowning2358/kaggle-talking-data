@@ -30,33 +30,37 @@ test_sparse = sparse.model.matrix(dummy ~ device_id + factor(phone_brand) +
 # Ensure factor levels are consistent
 levels=c("M23-26", "M32-38", "M29-31", "F43+", "F27-28", "F29-32",
          "M22-", "M39+", "M27-28", "F33-42", "F23-", "F24-26")
+brands = phone_brand[, c(unique(phone_brand), "NA")]
+models = phone_brand[, c(unique(device_model), "NA")]
 
 fit_model = function(X, y){
     y = as.numeric(factor(y, levels=levels)) - 1
-    X_sparse = sparse.model.matrix(fold ~ device_id + factor(phone_brand) +
-                                       factor(device_model) + 0,
+    X_sparse = sparse.model.matrix(fold ~ device_id + factor(phone_brand, levels=brands) +
+                                       factor(device_model, levels=models) + 0,
                                    data=X)
-    validation_index = sample(c(T, F), size=nrow(X), prob=c(0.3, 0.7), replace=TRUE)
-    dtrain = xgb.DMatrix(data=X_sparse[!validation_index, ], label=y[!validation_index])
-    dval = xgb.DMatrix(data=X_sparse[validation_index, ], label=y[validation_index])
-    model = xgb.train(data=dtrain,
-                      nrounds=100,
-                      watchlist=list(validation1=dval),
-                      verbose=-1,
-                      early.stop.round=3,
-                      maximize=FALSE,
-                      objective="multi:softprob",
-                      num_class=12,
-                      eval_metric="mlogloss")
+    # validation_index = sample(c(T, F), size=nrow(X), prob=c(0.3, 0.7), replace=TRUE)
+    # dtrain = xgb.DMatrix(data=X_sparse[!validation_index, ], label=y[!validation_index])
+    # dval = xgb.DMatrix(data=X_sparse[validation_index, ], label=y[validation_index])
+    dtrain = xgb.DMatrix(data=X_sparse, label=y)
+    model = xgb.train(params = list(eta=0.01, max_depth=8,
+                                    num_class=12, objective="multi:softprob",
+                                    eval_metric="mlogloss"),
+                      #watchlist=list(validation=dval, train=dtrain),
+                      data=dtrain,
+                      #early.stop.round = 10
+                      nrounds=500
+                      )
     return(model)
 }
 pred_model = function(model, X){
     X[, dummy := 1]
-    X_sparse = sparse.model.matrix(dummy ~ device_id + factor(phone_brand) +
-                                       factor(device_model) + 0,
+    X_sparse = sparse.model.matrix(dummy ~ device_id + factor(phone_brand, levels=brands) +
+                                       factor(device_model, levels=models) + 0,
                                    data=X)
     out = predict(model, newdata=X_sparse)
     out = matrix(out, ncol=12, byrow=TRUE)
+    colnames(out) = levels
+    return(out)
 }
 cv = crossValidation(model=list(predict=pred_model, fit=fit_model),
                     xTrain = train,
@@ -64,14 +68,5 @@ cv = crossValidation(model=list(predict=pred_model, fit=fit_model),
                     xTest = test,
                     cvIndices = train[, fold])
 summary(cv)
-multi_class_log_loss = function(pred_matrix, y){
-    y = as.numeric(factor(y, levels=levels))
-    y_matrix = t(sapply(y, function(x){
-        out = rep(0, 12)
-        out[x] = 1
-        return(out)
-    }))
-    result = apply(pred_matrix * y_matrix, 1, sum)
-    return(-mean(log(result)))
-}
-run(cv, metric=multi_class_log_loss, plotResults=FALSE, logged=TRUE)
+run(cv, metric=multi_class_log_loss, plotResults=FALSE, logged=TRUE, idCol="device_id",
+    filename="data/models/xgboost_no_validation")
