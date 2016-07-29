@@ -124,3 +124,60 @@ active_app_cnts = active_app_cnts[, list(app_type_cnt=sum(app_type_cnt)), by=c("
 write.csv(active_app_cnts, "features/active_app_category_counts.csv", row.names=FALSE)
 
 # Type of app: boolean, count, proportion of total by device_id
+
+label_categories[, category := tolower(category)]
+label_categories[, game := grepl("game|gaming|poker|chess|majiang|raising up|puzzle|puzzel
+                                 |world of warcraft", category)]
+label_categories[, unknown := grepl("unknown", category)]
+label_categories[, comic := grepl("comic", category)]
+label_categories[, shopping := grepl("shopping", category)]
+label_categories[, kids := grepl("babies|fetus|children|mother|pregnan|parent|matern", category)]
+label_categories[, education := grepl("education|study|language|class|exams|library|dictionary|
+                                      reading|poetry|science|psychology|audiobooks", category)]
+label_categories[, business := grepl("management|financial|business|accounting|jobs", category)]
+label_categories[, news := grepl("news|information", category)]
+label_categories[, tech := grepl("science|technology|smart|network disk", category)]
+label_categories[, blogs := grepl("blogs", category)]
+label_categories[, message := grepl("IM|message|email|phone|communitation", category)]
+label_categories[, travel := grepl("map|navigation|drive|car|taxi|flight|bus|train|travel|
+                                   tourism|transport", category)]
+label_categories[, household := grepl("household|dectoration|appliances|
+                                      furniture|housekeeping", category)]
+label_categories[, fitness := grepl("sports|health|medical|wealth|bank|securities|futures|
+                                    exchange|metals|financing|debit|pay", category)]
+label_categories[, horoscope := grepl("astrology", category)]
+label_categories[, weather := grepl("weather", category)]
+label_categories[, calendar := grepl("calendar", category)]
+label_categories[, fashion := grepl("fashion", category)]
+label_categories[, housing := grepl("estate|housing|$buy^|$sellers^|rentals", category)]
+label_categories[, entertainment := grepl("entertainment", category)]
+# Pick up on row 274
+
+installed = fread("features/installed_app_category_counts.csv")
+denom = installed[, max(abs(device_id))/10]
+installed[, device_group := round(device_id/denom)]
+setorder(installed)
+setkey(installed, "device_id")
+installed[, runlen := .I]
+# Use method from here: http://stackoverflow.com/questions/26244685/count-every-possible-pair-of-values-in-a-column-grouped-by-multiple-columns
+overlap = lapply(unique(installed$device_group), function(i){
+    installed_sample = installed[device_group == i, ]
+    installed_sample[installed_sample, {
+        tmp = runlen < i.runlen 
+        list(category[tmp], i.category[any(tmp)])
+        },
+        by=.EACHI][, .N, by="V1,V2"][order(N), ]
+})
+overlap = do.call("rbind", overlap)
+overlap = overlap[, list(N = sum(N)), by=c("V1", "V2")]
+setnames(overlap, "N", "overlap_count")
+setkey(overlap, "V1")
+agg_counts = installed[, .N, category]
+setkey(agg_counts, "category")
+overlap[agg_counts, V1_cnt := N]
+setkey(overlap, "V2")
+overlap[agg_counts, V2_cnt := N]
+overlap[, V1_pct := overlap_count / V1_cnt]
+overlap[, V2_pct := overlap_count / V2_cnt]
+overlap[order(V1_pct*V2_pct), ]
+overlap[order(V2_pct), ]

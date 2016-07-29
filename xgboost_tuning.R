@@ -56,5 +56,7 @@ for(eta in c(0.1, 0.3, 1)){
     }
 }
 
-ggplot(model, aes(x=iteration)) + geom_line(aes(y=train.mlogloss.mean, color="train")) +
-    geom_line(aes(y=test.mlogloss.mean, color="test"))
+ggplot(results[min_child_weight == 4, ], aes(x=iteration)) +
+    geom_line(aes(y=train.mlogloss.mean, color="train")) +
+    geom_line(aes(y=test.mlogloss.mean, color="test")) +
+    facet_wrap(eta ~ max_depth, scale="free")

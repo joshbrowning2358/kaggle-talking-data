@@ -28,19 +28,3 @@ Cross-validtion score:   2.401155
 Training rows:           74645
 Testing rows:            112071
 Cross-validation groups: 4
-
-Environment:             R (JOSH_LAPTOP)
-Model Key:               1469507997 
-File name:               data/models/xgboost_no_validation 
-Model name:              Unidentified! 
-Function call:           {
-y = as.numeric(factor(y, levels = levels)) - 1
-X_sparse = sparse.model.matrix(fold ~ device_id + factor(phone_brand, levels = brands) + factor(device_model, levels = models) + 0, data = X)
-dtrain = xgb.DMatrix(data = X_sparse, label = y)
-model = xgb.train(params = list(eta = 0.01, max_depth = 8, num_class = 12, objective = "multi:softprob", eval_metric = "mlogloss"), data = dtrain, nrounds = 500)
-return(model) 
-Execution time:          1469508779 
-Cross-validtion score:   2.398536 
-Training rows:           74645
-Testing rows:            112071
-Cross-validation groups: 4

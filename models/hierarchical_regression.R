@@ -24,9 +24,9 @@ levels=c("M23-26", "M32-38", "M29-31", "F43+", "F27-28", "F29-32",
          "M22-", "M39+", "M27-28", "F33-42", "F23-", "F24-26")
 
 fit_model = function(X, y){
-    model_gender = glmer(gender=="M" ~ (1|phone_brand) + (1|device_model), data=X,
+    model_gender = glmer(gender=="M" ~ (1|device_model:phone_brand), data=X,
                          family="binomial")
-    model_age = lmer(age ~ (1|phone_brand) + (1|device_model), data=X)
+    model_age = lmer(age ~ (1|device_model|phone_brand), data=X)
     return(list(model_gender, model_age))
 }
 pred_model = function(model, X){
