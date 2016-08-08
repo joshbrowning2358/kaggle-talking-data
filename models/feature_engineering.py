@@ -26,6 +26,7 @@ class FeatureEngineering():
         self.wide_files = wide_files
         self._check_inputs_are_strings()
         self.data = None
+        self.features = None
         if isinstance(key, str):
             key = [key]
         self.key = key
@@ -47,12 +48,22 @@ class FeatureEngineering():
                                     ' {} is of type {}!'.format(i, type(self.wide_files[i])))
 
     def extract_features(self):
+        """
+        Extracts the features from the provided files.
+        :return: A tuple of:
+            - self.data: The train and test datasets bound together, retaining the original features from those files.
+            This is intended for providing the target.
+            - features: A sparse matrix (of class csr_matrix) that contains the features.  The rows correspond to
+            the same rows in self.data, and the column names are provided in col_indices.
+            - col_indices: The indices of the columns in the features object
+        """
         self._get_train_test()
         if self.wide_files is not None:
             self._add_wide_features()
         if self.long_files is not None:
             self._add_long_features()
-        return self.data
+        col_indices, features = self._cast_long_features_to_wide()
+        return self.data, features, col_indices
 
     def _get_train_test(self):
         train = pd.read_csv(self.train_file)
@@ -67,30 +78,18 @@ class FeatureEngineering():
         for f in self.long_files:
             new_features = pd.read_csv(f)
             self._check_long_feature(new_features, f)
-            row_indices = new_features[self.key]
-            row_indices.drop_duplicates(inplace=True)
-            row_indices['row_index'] = range(row_indices.shape[0])
-            col_indices = set(new_features['variable'].tolist())
-            col_indices = pd.DataFrame({'variable': list(col_indices), 'col_index': range(len(col_indices))})
-            new_features = new_features.merge(row_indices, on=self.key)
-            new_features = new_features.merge(col_indices, on='variable')
-            sparse_mat = csr_matrix((new_features['value'], (new_features['row_index'], new_features['col_index'])),
-                                    shape=(row_indices.shape[0], col_indices.shape[0]))
-            new_features = pd.SparseDataFrame(
-                [pd.SparseSeries(sparse_mat[i].toarray().ravel())
-                 for i in np.arange(sparse_mat.shape[0])])
-            new_features.columns = col_indices['variable'].tolist()
-            # The indices will line up since row_indices is sorted by row_index (by construction) and these row_indices
-            # control the definition of sparse_mat.
-            row_indices.index = new_features.index
-            new_features = pd.concat([new_features, row_indices[self.key]], axis=1)
-            self.data = self.data.merge(new_features, 'left', self.key)
+            self.features = pd.concat([self.features, new_features], axis=0)
 
     def _add_wide_features(self):
         for f in self.wide_files:
-            new_features = pd.read_csv(f)
+            new_features = pd.read_csv(f, delimiter=',')
             self._check_wide_feature(new_features, f)
-            self.data = self.data.merge(new_features, 'left', self.key)
+            non_key_cols = list(set(new_features.columns.tolist()).difference(self.key))
+            for col in non_key_cols:
+                data_to_add = new_features[self.key + [col]]
+                data_to_add['variable'] = col
+                data_to_add.rename(columns={col: 'value'}, inplace=True)
+                self.features = pd.concat([self.features, data_to_add], axis=0)
 
     def _check_wide_feature(self, feature, filename):
         if set(self.key).intersection(feature) != set(self.key):
@@ -108,3 +107,18 @@ class FeatureEngineering():
         overlap = set(feature['variable']).intersection(self.data.columns)
         if overlap:
             raise TypeError('Re-defining variables {} in feature file {}!'.format(overlap, filename))
+
+    def _cast_long_features_to_wide(self):
+        row_indices = self.data[self.key]
+        if self.data[self.key].duplicated().any():
+            raise KeyError('Multiple occurences of one key were found in train/test!  The key must be unique!')
+        row_indices['row_index'] = range(row_indices.shape[0])
+        col_indices = set(self.features['variable'].tolist())
+        col_indices = pd.DataFrame({'variable': list(col_indices), 'col_index': range(len(col_indices))})
+        self.features = self.features.merge(row_indices, on=self.key)
+        self.features = self.features.merge(col_indices, on='variable')
+        sparse_mat = csr_matrix((self.features['value'], (self.features['row_index'], self.features['col_index'])),
+                                shape=(row_indices.shape[0], col_indices.shape[0]))
+        # The indices will line up since row_indices is sorted by row_index (by construction) and these row_indices
+        # control the definition of sparse_mat.
+        return col_indices, sparse_mat

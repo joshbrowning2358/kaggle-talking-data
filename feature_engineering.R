@@ -17,11 +17,15 @@ label_categories = fread("data/label_categories.csv")
 
 ## Brand and model
 
-brand = sparse.model.matrix(device_model ~ device_id + factor(phone_brand) + 0, data=phone_brand)
-save(brand, file="features/brand.RData")
-
-model = sparse.model.matrix(device_id ~ device_model + 0, data=phone_brand)
-save(model, file="features/model.RData")
+brand = unique(phone_brand[, list(device_id, phone_brand)])
+brand[is.na(phone_brand), phone_brand := "NA_phone_brand"]
+brand[, value := 1]
+setnames(brand, "phone_brand", "variable")
+model = unique(phone_brand[, list(device_id, device_model)])
+model[is.na(device_model), device_model := "NA_phone_brand"]
+model[, value := 1]
+setnames(model, "device_model", "variable")
+write.csv(rbind(brand, model), file="features/phone_brand.csv", row.names=FALSE)
 
 ## Events
 
@@ -114,13 +118,21 @@ installed_app_cnts = merge(installed_app_cnts, app_labels, by="app_id", allow.ca
 installed_app_cnts = installed_app_cnts[, list(app_type_cnt=sum(N)), by=c("device_id", "label_id")]
 installed_app_cnts = merge(installed_app_cnts, label_categories, by="label_id")
 installed_app_cnts = installed_app_cnts[, list(app_type_cnt=sum(app_type_cnt)), by=c("device_id", "category")]
+setnames(active_app_cnts, c("category", "app_type_cnt"), c("variable", "value"))
+active_app_cnts[, variable := paste0(variable, "_installed_cnt")]
 write.csv(installed_app_cnts, "features/installed_app_category_counts.csv", row.names=FALSE)
 
 active_app_cnts = app_events[is_active == 1, .N, by=c("app_id", "device_id")]
+active_app_features = copy(active_app_cnts)
+setnames(active_app_features, c("app_id", "N"), c("variable", "value"))
+active_app_features[, variable := paste0(variable, "_active_cnt")]
+write.csv(active_app_cnts, "features/active_app_id_counts.csv", row.names=FALSE)
 active_app_cnts = merge(active_app_cnts, app_labels, by="app_id", allow.cartesian=TRUE)
 active_app_cnts = active_app_cnts[, list(app_type_cnt=sum(N)), by=c("device_id", "label_id")]
 active_app_cnts = merge(active_app_cnts, label_categories, by="label_id")
 active_app_cnts = active_app_cnts[, list(app_type_cnt=sum(app_type_cnt)), by=c("device_id", "category")]
+setnames(active_app_cnts, c("category", "app_type_cnt"), c("variable", "value"))
+active_app_cnts[, variable := paste0(variable, "_active_cnt")]
 write.csv(active_app_cnts, "features/active_app_category_counts.csv", row.names=FALSE)
 
 # Type of app: boolean, count, proportion of total by device_id
