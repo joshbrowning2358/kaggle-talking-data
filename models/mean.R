@@ -29,4 +29,4 @@ cv = crossValidation(model=list(predict=pred_model, fit=fit_model),
                     xTest = test,
                     cvIndices = train[, fold])
 summary(cv)
-run(cv, metric=multi_class_log_loss, plotResults=TRUE, logged=FALSE)
+run(cv, metric=multi_class_log_loss, plotResults=FALSE, logged=TRUE, idCol="device_id")

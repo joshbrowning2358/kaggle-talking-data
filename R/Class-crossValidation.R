@@ -4,6 +4,7 @@ library(gridExtra)
 library(DEoptim)
 
 setClassUnion("factorOrNumeric", c("numeric", "factor"))
+setClassUnion("dtOrMatrix", c("data.table", "dgCMatrix"))
 
 ##' Check Cross Validation Model
 ##'
@@ -29,7 +30,6 @@ checkCrossValidation = function(object){
         errors = c(errors, msg)
     }
     if(length(object@cvIndices) > 0 & length(object@validationIndices) > 0){
-        msg = "cvIndices and validationIndices cannot both have length > 0!"
         errors = c(errors, msg)
     }
     if(length(object@cvIndices) == 0 & length(object@validationIndices) == 0){
@@ -96,9 +96,9 @@ checkCrossValidation = function(object){
 
 crossValidation = setClass(Class = "crossValidation",
     representation = representation(model = "list",
-                                    xTrain = "data.table",
+                                    xTrain = "dtOrMatrix",
                                     yTrain = "factorOrNumeric",
-                                    xTest = "data.table",
+                                    xTest = "dtOrMatrix",
                                     cvIndices = "numeric",
                                     validationIndices = "logical",
                                     cvTime = "logical"),
@@ -292,7 +292,7 @@ setMethod("logResults", signature(object="crossValidation"),
     log_file = "results_log.txt"
     
     functionText = as.character(body(object@model$fit))
-    possibleModels = c("xgboost", "glm", "lm", "naiveBayes")
+    possibleModels = c("xgboost", "xgb.train", "glm", "lm", "naiveBayes")
     match = sapply(possibleModels, function(mod){grep(mod, functionText)})
     suppressWarnings({
         matchIndex = min((1:length(match))[sapply(match, function(x){length(x) > 0})])
