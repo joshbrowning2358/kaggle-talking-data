@@ -64,8 +64,8 @@ class CrossValidation:
 
     def _run_cv(self, model, filename):
         error_metric = pd.DataFrame({'fold': [], 'error': []})
-        folds_to_run = self.fold.unique()
-        cv_prediction = np.repeat(np.nan, len(self.X_train))
+        folds_to_run = list(set(self.fold))
+        cv_prediction = np.repeat(np.nan, self.X_train.shape[0])
         for fold_number in folds_to_run:
             error = self._run_cv_fold(model, fold_number, cv_prediction)
             error_metric = error_metric.append({'fold': fold_number, 'error': error}, ignore_index=True)
@@ -108,6 +108,7 @@ class CrossValidation:
         fold_cnt = 4
         records_per_fold = self.X_train.shape[0] / fold_cnt + 1
         self.fold = np.random.permutation(range(fold_cnt)*records_per_fold)
+        self.fold = self.fold[:self.X_train.shape[0]]
 
     def _run_cv_fold(self, m, fold_number, cv_prediction):
         cv_filter = self.fold == fold_number
