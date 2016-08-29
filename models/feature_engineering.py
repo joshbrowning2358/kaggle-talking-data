@@ -111,7 +111,7 @@ class FeatureEngineering():
     def _cast_long_features_to_wide(self):
         row_indices = self.data[self.key]
         if self.data[self.key].duplicated().any():
-            raise KeyError('Multiple occurences of one key were found in train/test!  The key must be unique!')
+            raise KeyError('Multiple occurrences of one key were found in train/test!  The key must be unique!')
         row_indices['row_index'] = range(row_indices.shape[0])
         col_indices = set(self.features['variable'].tolist())
         col_indices = pd.DataFrame({'variable': list(col_indices), 'col_index': range(len(col_indices))})

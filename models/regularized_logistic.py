@@ -28,5 +28,3 @@ cv = CrossValidation(features[train_filter, :],
 model = MultinomialNB()
 model.predict = model.predict_proba
 out = cv.run(model, 'test')
-
-1 + 1
